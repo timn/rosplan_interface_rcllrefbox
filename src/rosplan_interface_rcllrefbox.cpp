@@ -300,7 +300,8 @@ class ROSPlanInterfaceRCLLRefBox {
 		{
 			rcll_ros_msgs::SendPrepareMachine srv;
 			srv.request.machine = str_toupper(bound_params[cfg_preparg_mps_var_]);
-			
+			srv.request.wait = true;
+
 			if (name == cfg_opname_prepare_bs_) {
 				if (bound_params.find(cfg_preparg_bs_side_var_) == bound_params.end()) {
 					ROS_ERROR("Action '%s' to prepare BS does not have side argument '%s'",
