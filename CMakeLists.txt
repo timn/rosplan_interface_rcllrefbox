@@ -64,21 +64,26 @@ catkin_package(
 ## Build ##
 ###########
 
-## Specify additional locations of header files
 include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
   ${boost_INCLUDE_DIRS}
 )
 
-## Declare a C++ executable
 add_executable(rosplan_interface_rcllrefbox src/rosplan_interface_rcllrefbox.cpp)
+
+add_executable(rosplan_kb_updater_rcll_machine_info src/kb_updater_machine_info)
 
 ## Add cmake target dependencies of the executable
 # add_dependencies(rosplan_interface_rcllrefbox_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-## Specify libraries to link a library or executable target against
 target_link_libraries(rosplan_interface_rcllrefbox
+  ${catkin_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${boost_LIBRARIES}
+)
+
+target_link_libraries(rosplan_kb_updater_rcll_machine_info
   ${catkin_LIBRARIES}
   ${Boost_LIBRARIES}
   ${boost_LIBRARIES}
