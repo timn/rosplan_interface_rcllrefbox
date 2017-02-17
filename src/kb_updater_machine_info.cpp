@@ -45,6 +45,7 @@ class ROSPlanKbUpdaterMachineInfo {
 
 		create_svc_update_knowledge();
 		create_svc_current_knowledge();
+		create_svc_current_instances();
 
 		ros::NodeHandle privn("~");
 		GET_CONFIG(privn, n, "rs_predicate", cfg_rs_predicate_);
