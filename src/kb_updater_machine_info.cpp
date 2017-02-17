@@ -43,13 +43,7 @@ class ROSPlanKbUpdaterMachineInfo {
 		sub_machine_info_ = n.subscribe("rcll/machine_info", 10,
 		                                &ROSPlanKbUpdaterMachineInfo::machine_info_cb, this);
 
-		svc_update_knowledge_ =
-			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateServiceArray>
-			("kcl_rosplan/update_knowledge_base_array", /* persistent */ true);
-
-		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
-		svc_update_knowledge_.waitForExistence();
-
+		create_svc_update_knowledge();
 		create_svc_current_knowledge();
 
 		ros::NodeHandle privn("~");
@@ -82,6 +76,17 @@ class ROSPlanKbUpdaterMachineInfo {
 		                    {rcll_ros_msgs::ProductColor::RING_YELLOW, cfg_rs_ring_value_yellow_} };
 
 		get_predicates();
+	}
+
+	void
+	create_svc_update_knowledge()
+	{
+		svc_update_knowledge_ =
+			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateServiceArray>
+			("kcl_rosplan/update_knowledge_base_array", /* persistent */ true);
+
+		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
+		svc_update_knowledge_.waitForExistence();
 	}
 
 	void
@@ -236,11 +241,17 @@ class ROSPlanKbUpdaterMachineInfo {
 		}
 
 		if (! remsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
 			if( ! svc_update_knowledge_.call(remsrv)) {
 				ROS_ERROR("Failed to remove predicates");
 			}
 		}
 		if (! addsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
 				ROS_ERROR("Failed to add predicates");
 				return;
@@ -278,6 +289,9 @@ class ROSPlanKbUpdaterMachineInfo {
 			}
 		}
 		if (! addsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
 				ROS_ERROR("Failed to add machine instances");
 				return;
