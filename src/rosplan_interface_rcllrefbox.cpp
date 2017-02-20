@@ -97,6 +97,11 @@ class ROSPlanInterfaceRCLLRefBox {
 		GET_CONFIG(privn, n, "preparg/rs_ring_orange", cfg_preparg_rs_orange_);
 		GET_CONFIG(privn, n, "preparg/rs_ring_yellow", cfg_preparg_rs_yellow_);
 
+		if (! privn.getParam("succeed_actions", cfg_succeed_actions_)) {
+			n.getParam("succeed_actions", cfg_succeed_actions_);
+		}
+		std::sort(cfg_succeed_actions_.begin(), cfg_succeed_actions_.end());
+
 		if (! privn.getParam("ignored_effect_predicates", cfg_igneffect_preds_)) {
 			n.getParam("ignored_effect_predicates", cfg_igneffect_preds_);
 		}
@@ -116,6 +121,17 @@ class ROSPlanInterfaceRCLLRefBox {
 		relevant_actions_.sort();
 
 		get_action_specs();
+
+		if (! cfg_succeed_actions_.empty()) {
+			std::string act_str;
+			bool first = true;
+			std::for_each(cfg_succeed_actions_.begin(), cfg_succeed_actions_.end(),
+			              [&act_str, &first](const auto &a) {
+				              if (first) first = false; else act_str += ",";
+				              act_str += a;
+			              });
+			ROS_INFO("Always succeeding actions: %s", act_str.c_str());
+		}
 	}
 
 	void
@@ -184,7 +200,9 @@ class ROSPlanInterfaceRCLLRefBox {
 		rosplan_knowledge_msgs::GetDomainOperatorService oplist_srv;
 		if (oplist_client.call(oplist_srv)) {
 			for (const auto &op : oplist_srv.response.operators) {
-				if (std::binary_search(relevant_actions_.begin(), relevant_actions_.end(), op.name)) {
+				if (std::binary_search(relevant_actions_.begin(), relevant_actions_.end(), op.name) ||
+				    std::binary_search(cfg_succeed_actions_.begin(), cfg_succeed_actions_.end(), op.name))
+				{
 					ROS_INFO("Retrieving action spec for %s", op.name.c_str());
 					get_action_spec(op.name);
 				} else {
@@ -430,6 +448,10 @@ class ROSPlanInterfaceRCLLRefBox {
 			} else {
 				ROS_INFO("Execution of SendPrepare for '%s' succeeded", name.c_str());
 			}
+
+		} else if (std::binary_search(cfg_succeed_actions_.begin(), cfg_succeed_actions_.end(), name)) {
+			ROS_INFO("Always succeeding action '%s' called", name.c_str());
+
 		} else {
 			ROS_ERROR("Received action for unhandled op '%s'", name.c_str());
 			send_action_fb(msg->action_id, ACTION_FAILED);
@@ -589,6 +611,7 @@ class ROSPlanInterfaceRCLLRefBox {
 	std::string cfg_preparg_rs_yellow_;
 
 	std::vector<std::string> cfg_igneffect_preds_;
+	std::vector<std::string> cfg_succeed_actions_;
 
 	std::list<std::string> relevant_actions_;
 };
