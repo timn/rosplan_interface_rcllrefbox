@@ -24,7 +24,7 @@
 #include <rosplan_dispatch_msgs/ActionDispatch.h>
 #include <rosplan_knowledge_msgs/DomainFormula.h>
 #include <rosplan_knowledge_msgs/KnowledgeItem.h>
-#include <rosplan_knowledge_msgs/KnowledgeUpdateService.h>
+#include <rosplan_knowledge_msgs/KnowledgeUpdateServiceArray.h>
 #include <rosplan_knowledge_msgs/GetDomainOperatorService.h>
 #include <rosplan_knowledge_msgs/GetDomainOperatorDetailsService.h>
 #include <rosplan_knowledge_msgs/GetDomainPredicateDetailsService.h>
@@ -68,18 +68,8 @@ class ROSPlanInterfaceRCLLRefBox {
 		pub_action_feedback_ =
 			n.advertise<rosplan_dispatch_msgs::ActionFeedback>("kcl_rosplan/action_feedback", 10, true);
 
-		svc_update_knowledge_ =
-			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateService>("kcl_rosplan/update_knowledge_base",
-			                                                                /* persistent */ true);
-		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
-		svc_update_knowledge_.waitForExistence();
-
-		svc_refbox_prepare_ =
-			n.serviceClient<rcll_ros_msgs::SendPrepareMachine>("rcll/send_prepare_machine",
-			                                                   /* persistent */ true);
-
-		ROS_INFO("Waiting for RCLL refbox service send_prepare_machine");
-		svc_refbox_prepare_.waitForExistence();
+		create_svc_update_knowledge();
+		create_svc_refbox_prepare();
 
 		ros::NodeHandle privn("~");
 		GET_CONFIG(privn, n, "opname/prepare_bs", cfg_opname_prepare_bs_);
@@ -126,6 +116,28 @@ class ROSPlanInterfaceRCLLRefBox {
 		relevant_actions_.sort();
 
 		get_action_specs();
+	}
+
+	void
+	create_svc_update_knowledge()
+	{
+		svc_update_knowledge_ =
+			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateServiceArray>
+			("kcl_rosplan/update_knowledge_base_array", /* persistent */ true);
+
+		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
+		svc_update_knowledge_.waitForExistence();
+	}
+
+	void
+	create_svc_refbox_prepare()
+	{
+		svc_refbox_prepare_ =
+			n.serviceClient<rcll_ros_msgs::SendPrepareMachine>("rcll/send_prepare_machine",
+			                                                   /* persistent */ true);
+
+		ROS_INFO("Waiting for RCLL refbox service send_prepare_machine");
+		svc_refbox_prepare_.waitForExistence();
 	}
 
 	void
@@ -290,11 +302,6 @@ class ROSPlanInterfaceRCLLRefBox {
 			return;
 		}
 
-		send_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateService::Request::REMOVE_KNOWLEDGE,
-		                       specs_[name].op.at_start_del_effects, bound_params);
-		send_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateService::Request::ADD_KNOWLEDGE,
-		                       specs_[name].op.at_start_add_effects, bound_params);
-
 		if (name == cfg_opname_prepare_bs_ || name == cfg_opname_prepare_cs_ ||
 		    name == cfg_opname_prepare_ds_ || name == cfg_opname_prepare_rs_)
 		{
@@ -408,7 +415,9 @@ class ROSPlanInterfaceRCLLRefBox {
 			         srv.request.machine.c_str(),
 			         srv.request.bs_side, srv.request.bs_base_color,
 			         srv.request.ds_gate, srv.request.rs_ring_color, srv.request.cs_operation);
-			
+			if (! svc_refbox_prepare_.isValid()) {
+				create_svc_refbox_prepare();
+			}
 			if( ! svc_refbox_prepare_.call(srv)) {
 				ROS_WARN("Failed to call SendPrepare for '%s'", name.c_str());
 				send_action_fb(msg->action_id, ACTION_FAILED);
@@ -427,10 +436,41 @@ class ROSPlanInterfaceRCLLRefBox {
 			return;
 		}
 
-		send_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateService::Request::REMOVE_KNOWLEDGE,
-		                       specs_[name].op.at_end_del_effects, bound_params);
-		send_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateService::Request::ADD_KNOWLEDGE,
-		                       specs_[name].op.at_end_add_effects, bound_params);
+		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray remsrv;
+		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray addsrv;
+
+		remsrv.request.update_type = rosplan_knowledge_msgs::KnowledgeUpdateServiceArrayRequest::REMOVE_KNOWLEDGE;
+		addsrv.request.update_type = rosplan_knowledge_msgs::KnowledgeUpdateServiceArrayRequest::ADD_KNOWLEDGE;
+
+		proc_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateServiceArray::Request::REMOVE_KNOWLEDGE,
+		                       specs_[name].op.at_start_del_effects, bound_params, remsrv, addsrv);
+		proc_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateServiceArray::Request::ADD_KNOWLEDGE,
+		                       specs_[name].op.at_start_add_effects, bound_params, remsrv, addsrv);
+		proc_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateServiceArray::Request::REMOVE_KNOWLEDGE,
+		                       specs_[name].op.at_end_del_effects, bound_params, remsrv, addsrv);
+		proc_predicate_updates(rosplan_knowledge_msgs::KnowledgeUpdateServiceArray::Request::ADD_KNOWLEDGE,
+		                       specs_[name].op.at_end_add_effects, bound_params, remsrv, addsrv);
+
+		if (! remsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
+			if( ! svc_update_knowledge_.call(remsrv)) {
+				ROS_ERROR("Failed to remove predicates");
+				send_action_fb(msg->action_id, ACTION_FAILED);
+				return;
+			}
+		}
+		if (! addsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
+			if( ! svc_update_knowledge_.call(addsrv)) {
+				ROS_ERROR("Failed to add predicates");
+				send_action_fb(msg->action_id, ACTION_FAILED);
+				return;
+			}
+		}
 
 		send_action_fb(msg->action_id, ACTION_ACHIEVED);
 	}
@@ -452,9 +492,11 @@ class ROSPlanInterfaceRCLLRefBox {
 	}
 	
 	void
-	send_predicate_updates(int op,
+	proc_predicate_updates(int op,
 	                       const std::vector<rosplan_knowledge_msgs::DomainFormula> &dfv,
-	                       std::map<std::string, std::string> &bound_params)
+	                       std::map<std::string, std::string> &bound_params,
+	                       rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &remsrv,
+	                       rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &addsrv)
 	{
 		for (const auto &df : dfv) {
 			if (std::binary_search(cfg_igneffect_preds_.begin(), cfg_igneffect_preds_.end(), df.name)) {
@@ -463,10 +505,9 @@ class ROSPlanInterfaceRCLLRefBox {
 				continue;
 			}
 
-			rosplan_knowledge_msgs::KnowledgeUpdateService srv;
-			srv.request.update_type = op;
-			srv.request.knowledge.knowledge_type = rosplan_knowledge_msgs::KnowledgeItem::FACT;
-			srv.request.knowledge.attribute_name = df.name;
+			rosplan_knowledge_msgs::KnowledgeItem item;
+			item.knowledge_type = rosplan_knowledge_msgs::KnowledgeItem::FACT;
+			item.attribute_name = df.name;
 
 			if (predicates_.find(df.name) == predicates_.end()) {
 				ROS_ERROR("Unknown predicate %s, cannot update", df.name.c_str());
@@ -486,20 +527,21 @@ class ROSPlanInterfaceRCLLRefBox {
 				} else {
 					pair.value = bound_params[df.typed_parameters[j].key];
 				}
-				srv.request.knowledge.values.push_back(pair);
+				item.values.push_back(pair);
 			}
 
 			std::string param_str;
-			std::for_each(srv.request.knowledge.values.begin(), srv.request.knowledge.values.end(),
+			std::for_each(item.values.begin(), item.values.end(),
 			              [&param_str](const auto &kv) { param_str += " " + kv.key + "=" + kv.value; });
 
-			ROS_INFO("%s (%s%s)",
-			         (op == rosplan_knowledge_msgs::KnowledgeUpdateService::Request::ADD_KNOWLEDGE)
-			         ? "Asserting" : "Retracting",
-			         srv.request.knowledge.attribute_name.c_str(),
-			         param_str.c_str());
-			if( ! svc_update_knowledge_.call(srv)) {
-				ROS_INFO("Failed to update predicate %s", df.name.c_str());
+			if (op == rosplan_knowledge_msgs::KnowledgeUpdateServiceArray::Request::ADD_KNOWLEDGE) {
+				ROS_INFO("[RPI-RCLL] Asserting (%s%s)",
+				         item.attribute_name.c_str(), param_str.c_str());
+				addsrv.request.knowledge.push_back(item);
+			} else {
+				ROS_INFO("[RPI-RCLL] Retracting (%s%s)",
+				         item.attribute_name.c_str(), param_str.c_str());
+				remsrv.request.knowledge.push_back(item);
 			}
 		}
 	}
