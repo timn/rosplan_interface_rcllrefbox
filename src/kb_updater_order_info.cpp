@@ -66,6 +66,10 @@ class ROSPlanKbUpdaterOrderInfo {
 		GET_CONFIG(privn, n, "order_color_argument", order_color_argument_);
 		GET_CONFIG(privn, n, "order_gate_argument", order_gate_argument_);
 
+		GET_CONFIG(privn, n, "order_object_prefix", order_object_prefix_);
+		GET_CONFIG(privn, n, "gate_object_prefix", gate_object_prefix_);
+		GET_CONFIG(privn, n, "order_complexity_object_prefix", order_complexity_object_prefix_);
+
 		GET_CONFIG(privn, n, "rs_ring_value_blue", cfg_rs_ring_value_blue_);
 		GET_CONFIG(privn, n, "rs_ring_value_green", cfg_rs_ring_value_green_);
 		GET_CONFIG(privn, n, "rs_ring_value_orange", cfg_rs_ring_value_orange_);
@@ -363,22 +367,23 @@ class ROSPlanKbUpdaterOrderInfo {
 		}
 	}
 
+
 	std::string
 	order_id_to_name(int order_id) 
 	{
-		return "o" + std::to_string(order_id);
+		return order_object_prefix_ + std::to_string(order_id);
 	}
 
 	std::string
 	complexity_to_name(int complexity) 
 	{
-		return "c" + std::to_string(complexity);
+		return order_complexity_object_prefix_ + std::to_string(complexity);
 	}
 
 	std::string
 	delivery_gate_to_name(int delivery_gate) 
 	{
-		return "g" + std::to_string(delivery_gate);
+		return gate_object_prefix_ + std::to_string(delivery_gate);
 	}
 
 	void
@@ -470,6 +475,11 @@ class ROSPlanKbUpdaterOrderInfo {
 
 	std::string cfg_cap_color_value_black_;
 	std::string cfg_cap_color_value_grey_;
+
+	std::string order_object_prefix_;
+	std::string gate_object_prefix_;
+	std::string order_complexity_object_prefix_;
+
 
 
 	std::map<std::string, rosplan_knowledge_msgs::DomainFormula> predicates_;
