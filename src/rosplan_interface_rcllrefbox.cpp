@@ -111,7 +111,7 @@ class ROSPlanInterfaceRCLLRefBox {
 			std::string pred_str;
 			std::for_each(cfg_igneffect_preds_.begin(), cfg_igneffect_preds_.end(),
 			              [&pred_str](const auto &p) { pred_str += " " + p; });
-			ROS_INFO("Ignored effect predicates:%s", pred_str.c_str());
+			ROS_INFO("[RPI-RefBox] Ignored effect predicates:%s", pred_str.c_str());
 		}
 
 		relevant_actions_.push_back(cfg_opname_prepare_bs_);
@@ -130,7 +130,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				              if (first) first = false; else act_str += ",";
 				              act_str += a;
 			              });
-			ROS_INFO("Always succeeding actions: %s", act_str.c_str());
+			ROS_INFO("[RPI-RefBox] Always succeeding actions: %s", act_str.c_str());
 		}
 	}
 
@@ -141,7 +141,7 @@ class ROSPlanInterfaceRCLLRefBox {
 			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateServiceArray>
 			("kcl_rosplan/update_knowledge_base_array", /* persistent */ true);
 
-		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
+		ROS_INFO("[RPI-RefBox] Waiting for ROSPlan service update_knowledge_base");
 		svc_update_knowledge_.waitForExistence();
 	}
 
@@ -152,7 +152,7 @@ class ROSPlanInterfaceRCLLRefBox {
 			n.serviceClient<rcll_ros_msgs::SendPrepareMachine>("rcll/send_prepare_machine",
 			                                                   /* persistent */ true);
 
-		ROS_INFO("Waiting for RCLL refbox service send_prepare_machine");
+		ROS_INFO("[RPI-RefBox] Waiting for RCLL refbox service send_prepare_machine");
 		svc_refbox_prepare_.waitForExistence();
 	}
 
@@ -162,9 +162,9 @@ class ROSPlanInterfaceRCLLRefBox {
 		ros::ServiceClient opdetail_client =
 			n.serviceClient<rosplan_knowledge_msgs::GetDomainOperatorDetailsService>
 			  ("kcl_rosplan/get_domain_operator_details");
-		//ROS_INFO("Waiting for ROSPlan service get_domain_operator_details");
+		//ROS_INFO("[RPI-RefBox] Waiting for ROSPlan service get_domain_operator_details");
 		if (! opdetail_client.waitForExistence(ros::Duration(10))) {
-			ROS_ERROR("Could not discover get_domain_operator_details service "
+			ROS_ERROR("[RPI-RefBox] Could not discover get_domain_operator_details service "
 			          "(for action spec '%s')", name.c_str());
 			return;
 		}
@@ -173,7 +173,7 @@ class ROSPlanInterfaceRCLLRefBox {
 		if (opdetail_client.call(srv)) {
 			bool has_robot_var = false;
 
-			//ROS_INFO("Parsing get_domain_operator_details response");
+			//ROS_INFO("[RPI-RefBox] Parsing get_domain_operator_details response");
 			std::set<std::string> reqp;
 			for (const auto &p : srv.response.op.formula.typed_parameters) {
 				reqp.insert(p.key);
@@ -181,7 +181,7 @@ class ROSPlanInterfaceRCLLRefBox {
 
 			specs_[name] = { srv.response.op.formula, srv.response.op, reqp };
 		} else {
-			ROS_ERROR("Could not get spec for operator %s", name.c_str());
+			ROS_ERROR("[RPI-RefBox] Could not get spec for operator %s", name.c_str());
 			return;
 		}
 	}
@@ -193,7 +193,7 @@ class ROSPlanInterfaceRCLLRefBox {
 			n.serviceClient<rosplan_knowledge_msgs::GetDomainOperatorService>
 			  ("kcl_rosplan/get_domain_operators");
 		if (! oplist_client.waitForExistence(ros::Duration(120))) {
-			ROS_ERROR("Could not retrieve action specs from ROSPlan");
+			ROS_ERROR("[RPI-RefBox] Could not retrieve action specs from ROSPlan");
 			return;
 		}
 		
@@ -203,14 +203,14 @@ class ROSPlanInterfaceRCLLRefBox {
 				if (std::binary_search(relevant_actions_.begin(), relevant_actions_.end(), op.name) ||
 				    std::binary_search(cfg_succeed_actions_.begin(), cfg_succeed_actions_.end(), op.name))
 				{
-					ROS_INFO("Retrieving action spec for %s", op.name.c_str());
+					ROS_INFO("[RPI-RefBox] Retrieving action spec for %s", op.name.c_str());
 					get_action_spec(op.name);
 				} else {
-					ROS_INFO("Ignoring irrelevant action '%s'", op.name.c_str());
+					ROS_INFO("[RPI-RefBox] Ignoring irrelevant action '%s'", op.name.c_str());
 				}
 			}
 		} else {
-			ROS_ERROR("Failed to get list of operators");
+			ROS_ERROR("[RPI-RefBox] Failed to get list of operators");
 		}
 
 		get_predicates();
@@ -247,7 +247,7 @@ class ROSPlanInterfaceRCLLRefBox {
 			n.serviceClient<rosplan_knowledge_msgs::GetDomainPredicateDetailsService>
 			  ("kcl_rosplan/get_domain_predicate_details", /* persistent */ true);
 		if (! pred_client.waitForExistence(ros::Duration(20))) {
-			ROS_ERROR("No service provider for get_domain_predicate_details");
+			ROS_ERROR("[RPI-RefBox] No service provider for get_domain_predicate_details");
 			return;
 		}
 
@@ -264,10 +264,10 @@ class ROSPlanInterfaceRCLLRefBox {
 				std::for_each(pred_srv.response.predicate.typed_parameters.begin(),
 				              pred_srv.response.predicate.typed_parameters.end(),
 				              [&pred_str](const auto &kv) { pred_str += " " + kv.key + ":" + kv.value; });
-				ROS_INFO("Relevant predicate: (%s%s)", pn.c_str(), pred_str.c_str());
+				ROS_INFO("[RPI-RefBox] Relevant predicate: (%s%s)", pn.c_str(), pred_str.c_str());
 				predicates_[pn] = pred_srv.response.predicate;
 			} else {
-				ROS_ERROR("Failed to get predicate details for %s", pn.c_str());
+				ROS_ERROR("[RPI-RefBox] Failed to get predicate details for %s", pn.c_str());
 				return;
 			}
 		}
@@ -288,7 +288,7 @@ class ROSPlanInterfaceRCLLRefBox {
 		const std::string &name(msg->name);
 
 		if (specs_.find(name) == specs_.end()) {
-			ROS_INFO("Unknown or ignored action %s called, ignoring", name.c_str());
+			ROS_INFO("[RPI-RefBox] Unknown or ignored action %s called, ignoring", name.c_str());
 			return;
 		}
 
@@ -303,7 +303,7 @@ class ROSPlanInterfaceRCLLRefBox {
 		if (! diff.empty()) {
 			std::string diff_s;
 			std::for_each(diff.begin(), diff.end(), [&diff_s](const auto &s) { diff_s += " " + s; });
-			ROS_WARN("Invalid call to %s (invalid or missing args %s), failing",
+			ROS_WARN("[RPI-RefBox] Invalid call to %s (invalid or missing args %s), failing",
 			         name.c_str(), diff_s.c_str());
 			send_action_fb(msg->action_id, ACTION_FAILED);
 			return;
@@ -313,7 +313,7 @@ class ROSPlanInterfaceRCLLRefBox {
 		get_bound_params(*msg, bound_params);
 
 		if (bound_params.find(cfg_preparg_mps_var_) == bound_params.end()) {
-			ROS_ERROR("Action '%s' does not have MPS argument '%s'",
+			ROS_ERROR("[RPI-RefBox] Action '%s' does not have MPS argument '%s'",
 			          name.c_str(), cfg_preparg_mps_var_.c_str());
 			
 			send_action_fb(msg->action_id, ACTION_FAILED);
@@ -329,13 +329,13 @@ class ROSPlanInterfaceRCLLRefBox {
 
 			if (name == cfg_opname_prepare_bs_) {
 				if (bound_params.find(cfg_preparg_bs_side_var_) == bound_params.end()) {
-					ROS_ERROR("Action '%s' to prepare BS does not have side argument '%s'",
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare BS does not have side argument '%s'",
 					          name.c_str(), cfg_preparg_bs_side_var_.c_str());
 					send_action_fb(msg->action_id, ACTION_FAILED);
 					return;
 				}
 				if (bound_params.find(cfg_preparg_bs_base_var_) == bound_params.end()) {
-					ROS_ERROR("Action '%s' to prepare BS does not have base color argument '%s'",
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare BS does not have base color argument '%s'",
 					          name.c_str(), cfg_preparg_bs_base_var_.c_str());
 					send_action_fb(msg->action_id, ACTION_FAILED);
 					return;
@@ -347,7 +347,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				} else if (bs_side == cfg_preparg_bs_side_output_) {
 					srv.request.bs_side = rcll_ros_msgs::SendPrepareMachine::Request::BS_SIDE_OUTPUT;
 				} else {
-					ROS_ERROR("Action '%s' to prepare BS invalid side argument '%s', must be '%s' or '%s'",
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare BS invalid side argument '%s', must be '%s' or '%s'",
 					          name.c_str(), bs_side.c_str(),
 					          cfg_preparg_bs_side_input_.c_str(), cfg_preparg_bs_side_output_.c_str());
 					send_action_fb(msg->action_id, ACTION_FAILED);
@@ -362,7 +362,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				} else if (bs_base_color == cfg_preparg_bs_base_silver_) {
 					srv.request.bs_base_color = rcll_ros_msgs::ProductColor::BASE_SILVER;
 				} else {
-					ROS_ERROR("Action '%s' to prepare BS invalid base color argument '%s', must be '%s', '%s', or '%s'",
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare BS invalid base color argument '%s', must be '%s', '%s', or '%s'",
 					          name.c_str(), bs_side.c_str(), cfg_preparg_bs_base_red_.c_str(),
 					          cfg_preparg_bs_base_black_.c_str(), cfg_preparg_bs_base_silver_.c_str());
 					send_action_fb(msg->action_id, ACTION_FAILED);
@@ -379,7 +379,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				} else if (ds_gate == cfg_preparg_ds_gate_3_) {
 					srv.request.ds_gate = 3;
 				} else {
-					ROS_ERROR("Action '%s' to prepare DS invalid gate argument '%s', must be '%s', '%s', or '%s'",
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare DS invalid gate argument '%s', must be '%s', '%s', or '%s'",
 					          name.c_str(), ds_gate.c_str(), cfg_preparg_ds_gate_1_.c_str(),
 					          cfg_preparg_ds_gate_2_.c_str(), cfg_preparg_ds_gate_3_.c_str());
 					send_action_fb(msg->action_id, ACTION_FAILED);
@@ -394,7 +394,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				} else if (cs_operation == cfg_preparg_cs_mount_) {
 					srv.request.cs_operation = rcll_ros_msgs::SendPrepareMachine::Request::CS_OP_MOUNT_CAP;
 				} else {
-					ROS_ERROR("Action '%s' to prepare CS invalid operation argument '%s', must be '%s' or '%s'",
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare CS invalid operation argument '%s', must be '%s' or '%s'",
 					          name.c_str(), cs_operation.c_str(), cfg_preparg_cs_retrieve_.c_str(),
 					          cfg_preparg_cs_mount_.c_str());
 					send_action_fb(msg->action_id, ACTION_FAILED);
@@ -413,7 +413,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				} else if (rs_ring_color == cfg_preparg_rs_yellow_) {
 					srv.request.rs_ring_color = rcll_ros_msgs::ProductColor::RING_YELLOW;
 				} else {
-					ROS_ERROR("Action '%s' to prepare RS invalid ring color argument '%s', "
+					ROS_ERROR("[RPI-RefBox] Action '%s' to prepare RS invalid ring color argument '%s', "
 					          "must be '%s', '%s', '%s', or '%s'",
 					          name.c_str(), rs_ring_color.c_str(), cfg_preparg_rs_blue_.c_str(),
 					          cfg_preparg_rs_green_.c_str(), cfg_preparg_rs_orange_.c_str(),
@@ -423,12 +423,12 @@ class ROSPlanInterfaceRCLLRefBox {
 				}
 
 			} else {
-				ROS_ERROR("WTF!?");
+				ROS_ERROR("[RPI-RefBox] WTF!?");
 				send_action_fb(msg->action_id, ACTION_FAILED);
 				return;
 			}
 
-			ROS_INFO("Calling %s %s %i %i %u %i %i",
+			ROS_INFO("[RPI-RefBox] Calling %s %s %i %i %u %i %i",
 			         svc_refbox_prepare_.getService().c_str(),
 			         srv.request.machine.c_str(),
 			         srv.request.bs_side, srv.request.bs_base_color,
@@ -437,23 +437,23 @@ class ROSPlanInterfaceRCLLRefBox {
 				create_svc_refbox_prepare();
 			}
 			if( ! svc_refbox_prepare_.call(srv)) {
-				ROS_WARN("Failed to call SendPrepare for '%s'", name.c_str());
+				ROS_WARN("[RPI-RefBox] Failed to call SendPrepare for '%s'", name.c_str());
 				send_action_fb(msg->action_id, ACTION_FAILED);
 				return;
 			} else if (! srv.response.ok) {
-				ROS_WARN("Execution of SendPrepare for '%s' failed: %s",
+				ROS_WARN("[RPI-RefBox] Execution of SendPrepare for '%s' failed: %s",
 				         name.c_str(), srv.response.error_msg.c_str());
 				send_action_fb(msg->action_id, ACTION_FAILED);
 				return;
 			} else {
-				ROS_INFO("Execution of SendPrepare for '%s' succeeded", name.c_str());
+				ROS_INFO("[RPI-RefBox] Execution of SendPrepare for '%s' succeeded", name.c_str());
 			}
 
 		} else if (std::binary_search(cfg_succeed_actions_.begin(), cfg_succeed_actions_.end(), name)) {
-			ROS_INFO("Always succeeding action '%s' called", name.c_str());
+			ROS_INFO("[RPI-RefBox] Always succeeding action '%s' called", name.c_str());
 
 		} else {
-			ROS_ERROR("Received action for unhandled op '%s'", name.c_str());
+			ROS_ERROR("[RPI-RefBox] Received action for unhandled op '%s'", name.c_str());
 			send_action_fb(msg->action_id, ACTION_FAILED);
 			return;
 		}
@@ -478,7 +478,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(remsrv)) {
-				ROS_ERROR("Failed to remove predicates");
+				ROS_ERROR("[RPI-RefBox] Failed to remove predicates");
 				send_action_fb(msg->action_id, ACTION_FAILED);
 				return;
 			}
@@ -488,7 +488,7 @@ class ROSPlanInterfaceRCLLRefBox {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
-				ROS_ERROR("Failed to add predicates");
+				ROS_ERROR("[RPI-RefBox] Failed to add predicates");
 				send_action_fb(msg->action_id, ACTION_FAILED);
 				return;
 			}
@@ -523,7 +523,7 @@ class ROSPlanInterfaceRCLLRefBox {
 		for (const auto &df : dfv) {
 			if (std::binary_search(cfg_igneffect_preds_.begin(), cfg_igneffect_preds_.end(), df.name)) {
 				// Ignore this predicate and continue with the next
-				ROS_INFO("Ignoring effect predicate '%s'", df.name.c_str());
+				ROS_INFO("[RPI-RefBox] Ignoring effect predicate '%s'", df.name.c_str());
 				continue;
 			}
 
@@ -532,11 +532,11 @@ class ROSPlanInterfaceRCLLRefBox {
 			item.attribute_name = df.name;
 
 			if (predicates_.find(df.name) == predicates_.end()) {
-				ROS_ERROR("Unknown predicate %s, cannot update", df.name.c_str());
+				ROS_ERROR("[RPI-RefBox] Unknown predicate %s, cannot update", df.name.c_str());
 				continue;
 			}
 			if (predicates_[df.name].typed_parameters.size() != df.typed_parameters.size()) {
-				ROS_ERROR("Inconsistent typed parameters for %s", df.name.c_str());
+				ROS_ERROR("[RPI-RefBox] Inconsistent typed parameters for %s", df.name.c_str());
 				continue;
 			}
 
@@ -557,11 +557,11 @@ class ROSPlanInterfaceRCLLRefBox {
 			              [&param_str](const auto &kv) { param_str += " " + kv.key + "=" + kv.value; });
 
 			if (op == rosplan_knowledge_msgs::KnowledgeUpdateServiceArray::Request::ADD_KNOWLEDGE) {
-				ROS_INFO("[RPI-RCLL] Asserting (%s%s)",
+				ROS_INFO("[RPI-RefBox] Asserting (%s%s)",
 				         item.attribute_name.c_str(), param_str.c_str());
 				addsrv.request.knowledge.push_back(item);
 			} else {
-				ROS_INFO("[RPI-RCLL] Retracting (%s%s)",
+				ROS_INFO("[RPI-RefBox] Retracting (%s%s)",
 				         item.attribute_name.c_str(), param_str.c_str());
 				remsrv.request.knowledge.push_back(item);
 			}
