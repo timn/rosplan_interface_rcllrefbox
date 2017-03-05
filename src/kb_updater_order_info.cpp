@@ -26,6 +26,7 @@
 #include <rosplan_knowledge_msgs/GetAttributeService.h>
 #include <rosplan_knowledge_msgs/GetInstanceService.h>
 #include <rosplan_knowledge_msgs/GetDomainPredicateDetailsService.h>
+#include <rosplan_knowledge_msgs/GetDomainAttributeService.h>
 #include <diagnostic_msgs/KeyValue.h>
 #include <rcll_ros_msgs/Order.h>
 #include <rcll_ros_msgs/OrderInfo.h>
@@ -57,7 +58,7 @@ class ROSPlanKbUpdaterOrderInfo {
 		GET_CONFIG(privn, n, "order_cap_color_predicate", order_cap_color_predicate_);
 		GET_CONFIG(privn, n, "order_delivery_gate_predicate", order_delivery_gate_predicate_);
 		GET_CONFIG(privn, n, "order_delivery_period_begin_predicate", order_delivery_period_begin_predicate_);
-		GET_CONFIG(privn, n, "order_delivery_period_end_predicate", order_delivery_period_begin_predicate_);
+		GET_CONFIG(privn, n, "order_delivery_period_end_predicate", order_delivery_period_end_predicate_);
 
 
 		GET_CONFIG(privn, n, "order_instance_type", order_instance_type_);
@@ -86,10 +87,16 @@ class ROSPlanKbUpdaterOrderInfo {
 
 
 		relevant_predicates_ = {order_complexity_predicate_, order_base_color_predicate_, order_ring1_color_predicate_, order_ring2_color_predicate_, order_ring3_color_predicate_, order_cap_color_predicate_, order_delivery_gate_predicate_};
-//, order_delivery_period_begin_predicate_, order_delivery_period_begin_predicate_};
+
 		relevant_predicates_.sort();
 		relevant_predicates_.unique();
 		relevant_predicates_.remove_if([](const std::string &s) { return s.empty(); });
+
+		relevant_functions_ = {order_delivery_period_begin_predicate_, order_delivery_period_end_predicate_};
+		relevant_functions_.sort();
+		relevant_functions_.unique();
+		relevant_functions_.remove_if([](const std::string &s) { return s.empty(); });
+
 
 		rs_ring_colors_ = { {rcll_ros_msgs::ProductColor::RING_BLUE, cfg_rs_ring_value_blue_},
 		                    {rcll_ros_msgs::ProductColor::RING_GREEN, cfg_rs_ring_value_green_},
@@ -104,6 +111,7 @@ class ROSPlanKbUpdaterOrderInfo {
 		                    {rcll_ros_msgs::ProductColor::CAP_GREY, cfg_cap_color_value_grey_} };
 
 		get_predicates();
+		get_functions();
 	}
 
 	void
@@ -164,6 +172,41 @@ class ROSPlanKbUpdaterOrderInfo {
 				ROS_ERROR("Failed to get predicate details for %s", pn.c_str());
 				return;
 			}
+		}
+	}
+
+	void
+	get_functions()
+	{
+		// fetch and store predicate details
+		ros::service::waitForService("kcl_rosplan/get_domain_functions",ros::Duration(20));
+		ros::ServiceClient func_client =
+			n.serviceClient<rosplan_knowledge_msgs::GetDomainAttributeService>
+			  ("kcl_rosplan/get_domain_functions", /* persistent */ true);
+		if (! func_client.waitForExistence(ros::Duration(20))) {
+			ROS_ERROR("No service provider for get_domain_functions");
+			return;
+		}	
+
+		rosplan_knowledge_msgs::GetDomainAttributeService func_srv;
+		
+		if (func_client.call(func_srv)) {
+			for (const auto &rf : relevant_functions_) {
+				bool found_func = false;
+				for (const auto &pn : func_srv.response.items) {			
+					if (rf == pn.name) {
+						found_func = true;
+						functions_[rf] = pn;
+						ROS_INFO("Relevant function: %s", pn.name.c_str());
+						break;
+					}
+				}
+				if (!found_func) {
+					ROS_ERROR("Failed to get function info for: %s", rf.c_str());
+				}
+			}
+		} else {
+			ROS_ERROR("Failed to get functions info");
 		}
 	}
 
@@ -303,6 +346,87 @@ class ROSPlanKbUpdaterOrderInfo {
 	}
 
 	void
+	check_function(const std::string &function_name,
+	                       const std::string &idvar_name, const std::string &idvar_value,
+	                       const std::map<std::string, std::string> &extra_args,
+	                       double function_value,
+	                       rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &remsrv,
+	                       rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &addsrv)
+	{
+		if (functions_.find(function_name) != functions_.end()) {
+			rosplan_knowledge_msgs::GetAttributeService srv;
+			srv.request.predicate_name = function_name;
+			if (! svc_current_knowledge_.isValid()) {
+				create_svc_current_knowledge();
+			}
+			if (svc_current_knowledge_.call(srv)) {
+				bool not_found_at_all = true;
+				for (const auto &a : srv.response.attributes) {
+					std::map<std::string, std::string> arguments;
+					for (const auto &kv : a.values)  arguments[kv.key] = kv.value;
+
+					if (arguments.find(idvar_name) != arguments.end() &&
+					    arguments[idvar_name] == idvar_value)
+					{
+						not_found_at_all = false;
+						if (std::any_of(extra_args.begin(), extra_args.end(),
+						                [&arguments](const auto &ev) -> bool
+						                { return (arguments.find(ev.first) != arguments.end() &&
+						                          arguments[ev.first] != ev.second); }))
+							
+						{
+							if (a.function_value != function_value) {
+								ROS_INFO("Updating '%s' for '%s'", function_name.c_str(), idvar_value.c_str());
+								rosplan_knowledge_msgs::KnowledgeItem new_a = a;
+								std::for_each(extra_args.begin(), extra_args.end(),
+									      [&new_a, &function_value](auto &ev) {
+										      for (auto &kv : new_a.values) {
+											      if (kv.key == ev.first) {
+												      kv.value = ev.second;
+												      break;
+											      }
+										      }
+										      new_a.function_value = function_value;
+									      });
+
+								remsrv.request.knowledge.push_back(a);
+								addsrv.request.knowledge.push_back(new_a);
+							} else {
+								ROS_INFO("No need to update %s", function_name.c_str());
+							}
+						}
+						// we do NOT break here, by this, we also remove any additional
+						// fact that matches the idvar and ensure data uniqueness.
+					}
+				}
+				if (not_found_at_all) {
+					// It does not exist at all, create
+					rosplan_knowledge_msgs::KnowledgeItem new_a;
+					new_a.knowledge_type = rosplan_knowledge_msgs::KnowledgeItem::FUNCTION;
+					new_a.attribute_name = function_name;
+					{ // Add ID argument
+						diagnostic_msgs::KeyValue kv;
+						kv.key = idvar_name; kv.value = idvar_value;
+						new_a.values.push_back(kv);
+					}
+					std::for_each(extra_args.begin(), extra_args.end(),
+					              [&new_a](const auto &ev) {
+						              diagnostic_msgs::KeyValue kv;
+						              kv.key = ev.first; kv.value = ev.second;
+						              new_a.values.push_back(kv);
+					              });
+					new_a.function_value = function_value;
+					addsrv.request.knowledge.push_back(new_a);
+					ROS_INFO("Adding '%s' info for %s", function_name.c_str(), idvar_value.c_str());
+				}
+			} else {
+				ROS_ERROR("Failed to call '%s' for '%s'",
+				          svc_current_knowledge_.getService().c_str(), function_name.c_str());
+			}
+		}
+	}
+
+	void
 	send_order_predicate_updates(const rcll_ros_msgs::Order &o)
 	{
 		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray remsrv;
@@ -328,6 +452,9 @@ class ROSPlanKbUpdaterOrderInfo {
 		check_unique_predicate(order_delivery_gate_predicate_, order_id_argument_, order_id_to_name(o.id),
 		                       { {order_gate_argument_, delivery_gate_to_name(o.delivery_gate)} },
 		                       remsrv, addsrv);
+
+		check_function(order_delivery_period_begin_predicate_, order_id_argument_, order_id_to_name(o.id), {}, o.delivery_period_begin, remsrv, addsrv);
+		check_function(order_delivery_period_end_predicate_, order_id_argument_, order_id_to_name(o.id), {}, o.delivery_period_end, remsrv, addsrv);
 
 		if (o.complexity > 0) {
 			check_unique_predicate(order_ring1_color_predicate_, order_id_argument_, order_id_to_name(o.id),
@@ -484,6 +611,8 @@ class ROSPlanKbUpdaterOrderInfo {
 
 	std::map<std::string, rosplan_knowledge_msgs::DomainFormula> predicates_;
 	std::list<std::string> relevant_predicates_;
+	std::map<std::string, rosplan_knowledge_msgs::DomainFormula> functions_;
+	std::list<std::string> relevant_functions_;
 
 	std::map<int, std::string> rs_ring_colors_;
 	std::map<int, std::string> rs_base_colors_;
