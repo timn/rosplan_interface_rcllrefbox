@@ -1,5 +1,5 @@
 /***************************************************************************
- *  rosplan_interface_rcllrefbox.cpp - Referee box actions
+ *  rosplan_kb_updater_machine_info.cpp - Referee box actions
  *
  *  Created: Wed Feb 16 22:37:18 2017
  *  Copyright  2017  Tim Niemueller [www.niemueller.de]
@@ -414,7 +414,7 @@ class ROSPlanKbUpdaterMachineInfo {
 int
 main(int argc, char **argv)
 {
-	ros::init(argc, argv, "rosplan_interface_behaviorengine");
+	ros::init(argc, argv, "rosplan_kb_updater_machine_info");
 
 	ros::NodeHandle n;
 
