@@ -285,67 +285,6 @@ class ROSPlanKbUpdaterOrderInfo {
 	}
 
 	void
-	check_binary_multi_predicate(const std::string &predicate_name,
-	                             const std::string &idvar_name, const std::string &idvar_value,
-	                             const std::string &valvar_name,
-	                             const std::vector<std::string> &valvar_values,
-	                             rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &remsrv,
-	                             rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &addsrv)
-	{
-		if (predicates_.find(predicate_name) != predicates_.end()) {
-			rosplan_knowledge_msgs::GetAttributeService srv;
-			srv.request.predicate_name = predicate_name;
-			if (! svc_current_knowledge_.isValid()) {
-				create_svc_current_knowledge();
-			}
-			if (svc_current_knowledge_.call(srv)) {
-				std::list<std::string> act_values;
-				std::vector<rosplan_knowledge_msgs::KnowledgeItem> act_attributes;
-
-				std::for_each(srv.response.attributes.begin(), srv.response.attributes.end(),
-				              [&act_values, &act_attributes, &valvar_name, &idvar_name, &idvar_value](const auto &a) {
-					               std::map<std::string, std::string> args;
-					               std::transform(a.values.begin(), a.values.end(), std::inserter(args, args.end()),
-					                              [](const auto &v) { return std::make_pair(v.key, v.value); });
-					               if (args.find(idvar_name) != args.end() &&
-					                   args[idvar_name] == idvar_value)
-					               {
-						               act_attributes.push_back(a);
-						               if (args.find(valvar_name) != args.end())
-						               {
-							               act_values.push_back(args[valvar_name]);
-						               }
-					               }
-				              });
-
-				if (act_values.size() != valvar_values.size() ||
-				    std::mismatch(act_values.begin(), act_values.end(), valvar_values.begin()).first != act_values.end())
-				{
-					// there is a mismatch, we need to update, always update all
-					std::for_each(act_attributes.begin(), act_attributes.end(),
-					              [&remsrv](const auto &a) { remsrv.request.knowledge.push_back(a); });
-
-					std::for_each(valvar_values.begin(), valvar_values.end(),
-					              [&addsrv,&predicate_name,&idvar_name,&idvar_value,&valvar_name](const auto &v) {
-						              rosplan_knowledge_msgs::KnowledgeItem new_a;
-						              new_a.knowledge_type = rosplan_knowledge_msgs::KnowledgeItem::FACT;
-						              new_a.attribute_name = predicate_name;
-						              diagnostic_msgs::KeyValue kv;
-						              kv.key = idvar_name; kv.value = idvar_value;
-						              new_a.values.push_back(kv);
-						              kv.key = valvar_name; kv.value = v;
-						              new_a.values.push_back(kv);
-						              addsrv.request.knowledge.push_back(new_a);
-					              });
-				}
-			} else {
-				ROS_ERROR("Failed to call '%s' for '%s'",
-				          svc_current_knowledge_.getService().c_str(), predicate_name.c_str());
-			}
-		}
-	}
-
-	void
 	check_function(const std::string &function_name,
 	                       const std::string &idvar_name, const std::string &idvar_value,
 	                       const std::map<std::string, std::string> &extra_args,
@@ -533,11 +472,12 @@ class ROSPlanKbUpdaterOrderInfo {
 		std::sort(instances.begin(), instances.end());
 		for (const rcll_ros_msgs::Order &o : orders) {
 			//ROS_WARN("Got: %d = %s", o.id, order_id_to_name(o.id));
-			if (! std::binary_search(instances.begin(), instances.end(), order_id_to_name(o.id))) {
+			std::string order_name(order_id_to_name(o.id));
+			if (! std::binary_search(instances.begin(), instances.end(), order_name)) {
 				rosplan_knowledge_msgs::KnowledgeItem new_i;
 				new_i.knowledge_type = rosplan_knowledge_msgs::KnowledgeItem::INSTANCE;
 				new_i.instance_type = order_instance_type_;
-				new_i.instance_name = order_id_to_name(o.id);
+				new_i.instance_name = order_name;
 				addsrv.request.knowledge.push_back(new_i);
 				ROS_INFO("Adding missing instance '%s - %s'",
 				         new_i.instance_name.c_str(), new_i.instance_type.c_str());
