@@ -29,6 +29,9 @@
 #include <diagnostic_msgs/KeyValue.h>
 #include <rcll_ros_msgs/MachineInfo.h>
 #include <rcll_ros_msgs/ProductColor.h>
+#include <rcll_ros_msgs/RingInfo.h>
+
+#include <mutex>
 
 #define GET_CONFIG(privn, n, path, var)	  \
 	if (! privn.getParam(path, var)) {      \
@@ -42,6 +45,8 @@ class ROSPlanKbUpdaterMachineInfo {
 	{
 		sub_machine_info_ = n.subscribe("rcll/machine_info", 10,
 		                                &ROSPlanKbUpdaterMachineInfo::machine_info_cb, this);
+		sub_ring_info_ = n.subscribe("rcll/ring_info", 10,
+		                             &ROSPlanKbUpdaterMachineInfo::ring_info_cb, this);
 
 		create_svc_update_knowledge();
 		create_svc_current_knowledge();
@@ -63,6 +68,7 @@ class ROSPlanKbUpdaterMachineInfo {
 		GET_CONFIG(privn, n, "rs_ring_value_green", cfg_rs_ring_value_green_);
 		GET_CONFIG(privn, n, "rs_ring_value_orange", cfg_rs_ring_value_orange_);
 		GET_CONFIG(privn, n, "rs_ring_value_yellow", cfg_rs_ring_value_yellow_);
+		GET_CONFIG(privn, n, "rs_ring_num_values", cfg_rs_ring_num_values_);
 		GET_CONFIG(privn, n, "machine_instance_type", cfg_machine_instance_type_);
 
 		relevant_predicates_ = {cfg_rs_predicate_, cfg_mps_type_predicate_, cfg_mps_state_predicate_};
@@ -76,6 +82,12 @@ class ROSPlanKbUpdaterMachineInfo {
 		                    {rcll_ros_msgs::ProductColor::RING_YELLOW, cfg_rs_ring_value_yellow_} };
 
 		get_predicates();
+
+		if (predicates_[cfg_rs_predicate_].typed_parameters.size() != 3) {
+			ROS_ERROR("Invalid number of arguments to predicate '%s', got %zu, expected 3",
+			          cfg_rs_predicate_.c_str(), predicates_[cfg_rs_predicate_].typed_parameters.size());
+			throw std::runtime_error("Invalid number of arguments to RS predicate");
+		}
 	}
 
 	void
@@ -134,7 +146,7 @@ class ROSPlanKbUpdaterMachineInfo {
 				predicates_[pn] = pred_srv.response.predicate;
 			} else {
 				ROS_ERROR("Failed to get predicate details for %s", pn.c_str());
-				return;
+				throw std::runtime_error("Failed to get predicate details");
 			}
 		}
 	}
@@ -275,49 +287,59 @@ class ROSPlanKbUpdaterMachineInfo {
 	}
 
 	void
-	send_machine_predicate_updates(const rcll_ros_msgs::Machine &m)
+	check_multi_predicate(const std::string &predicate_name,
+	                      const std::vector<std::map<std::string, std::string>> &expected_values,
+	                      rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &remsrv,
+	                      rosplan_knowledge_msgs::KnowledgeUpdateServiceArray &addsrv)
 	{
-		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray remsrv;
-		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray addsrv;
-
-		remsrv.request.update_type = rosplan_knowledge_msgs::KnowledgeUpdateServiceArrayRequest::REMOVE_KNOWLEDGE;
-		addsrv.request.update_type = rosplan_knowledge_msgs::KnowledgeUpdateServiceArrayRequest::ADD_KNOWLEDGE;
-
-		check_unique_predicate(cfg_mps_type_predicate_, cfg_name_argument_, m.name,
-		                       { {cfg_type_argument_, m.type} },
-		                       remsrv, addsrv);
-
-		check_unique_predicate(cfg_mps_state_predicate_, cfg_name_argument_, m.name,
-		                       { {cfg_state_argument_, m.state} },
-		                       remsrv, addsrv);
-
-		if (m.type == "RS") {
-			if (m.rs_ring_colors.size() == 2) {
-				// Info has actually been provided
-				std::vector<std::string> valvar_values = {rs_ring_colors_[m.rs_ring_colors[0]],
-				                                          rs_ring_colors_[m.rs_ring_colors[1]]};
-				std::sort(valvar_values.begin(), valvar_values.end());
-				check_binary_multi_predicate(cfg_rs_predicate_, cfg_name_argument_, m.name,
-				                             cfg_rs_ring_argument_, valvar_values,
-				                             remsrv, addsrv);
+		if (predicates_.find(predicate_name) != predicates_.end()) {
+			rosplan_knowledge_msgs::GetAttributeService srv;
+			srv.request.predicate_name = predicate_name;
+			if (! svc_current_knowledge_.isValid()) {
+				create_svc_current_knowledge();
 			}
-		}
+			if (svc_current_knowledge_.call(srv)) {
+				std::vector<std::map<std::string, std::string>> act_values;
+				std::vector<rosplan_knowledge_msgs::KnowledgeItem> act_attributes;
 
-		if (! remsrv.request.knowledge.empty()) {
-			if (! svc_update_knowledge_.isValid()) {
-				create_svc_update_knowledge();
-			}
-			if( ! svc_update_knowledge_.call(remsrv)) {
-				ROS_ERROR("Failed to remove predicates");
-			}
-		}
-		if (! addsrv.request.knowledge.empty()) {
-			if (! svc_update_knowledge_.isValid()) {
-				create_svc_update_knowledge();
-			}
-			if( ! svc_update_knowledge_.call(addsrv)) {
-				ROS_ERROR("Failed to add predicates");
-				return;
+				std::for_each(srv.response.attributes.begin(), srv.response.attributes.end(),
+				              [&act_values, &act_attributes](const auto &a) {
+					               std::map<std::string, std::string> args;
+					               std::transform(a.values.begin(), a.values.end(), std::inserter(args, args.end()),
+					                              [](const auto &v) { return std::make_pair(v.key, v.value); });
+					               act_attributes.push_back(a);
+					               act_values.push_back(args);
+				              });
+
+				// sort for std::mismatch, expected_values must also be sorted!
+				std::sort(act_values.begin(), act_values.end());
+
+				if (std::mismatch(act_values.begin(), act_values.end(),
+				                  expected_values.begin(), expected_values.end())
+				    != std::make_pair(act_values.end(), expected_values.end()))
+				{
+					ROS_INFO("*** Updating %s", predicate_name.c_str());
+					// there is a mismatch, we need to update, always update all
+					std::for_each(act_attributes.begin(), act_attributes.end(),
+					              [&remsrv](const auto &a) { remsrv.request.knowledge.push_back(a); });
+
+					std::for_each(expected_values.begin(), expected_values.end(),
+					              [&addsrv,&predicate_name](const auto &exp_args) {
+						              rosplan_knowledge_msgs::KnowledgeItem new_a;
+						              new_a.knowledge_type = rosplan_knowledge_msgs::KnowledgeItem::FACT;
+						              new_a.attribute_name = predicate_name;
+						              for (const auto &arg : exp_args) {
+							              diagnostic_msgs::KeyValue kv;
+							              kv.key = arg.first;
+							              kv.value = arg.second;
+							              new_a.values.push_back(kv);
+						              }
+						              addsrv.request.knowledge.push_back(new_a);
+					              });
+				}
+			} else {
+				ROS_ERROR("Failed to call '%s' for '%s'",
+				          svc_current_knowledge_.getService().c_str(), predicate_name.c_str());
 			}
 		}
 	}
@@ -363,13 +385,78 @@ class ROSPlanKbUpdaterMachineInfo {
 	}
 
 	void
+	ring_info_cb(const rcll_ros_msgs::RingInfo::ConstPtr& msg)
+	{
+		std::unique_lock<std::mutex> lock(rs_ring_material_mutex_);
+		for (const auto &r : msg->rings) {
+			if (r.raw_material > cfg_rs_ring_num_values_.size()) {
+				ROS_WARN("Invalid raw material, %u > %zu (ring %i), ignoring",
+				         r.raw_material, cfg_rs_ring_num_values_.size(), r.ring_color);
+				continue;
+			}
+			rs_ring_material_[r.ring_color] = r.raw_material;
+		}
+	}
+
+	void
 	machine_info_cb(const rcll_ros_msgs::MachineInfo::ConstPtr& msg)
 	{
-		//ROS_INFO("Sending updates (conditionally)");
 		send_machine_instance_updates(msg->machines);
+
+		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray remsrv;
+		rosplan_knowledge_msgs::KnowledgeUpdateServiceArray addsrv;
+		remsrv.request.update_type = rosplan_knowledge_msgs::KnowledgeUpdateServiceArrayRequest::REMOVE_KNOWLEDGE;
+		addsrv.request.update_type = rosplan_knowledge_msgs::KnowledgeUpdateServiceArrayRequest::ADD_KNOWLEDGE;
+
+		std::vector<std::map<std::string, std::string>> rs_expected_values;
 		for (const rcll_ros_msgs::Machine &m : msg->machines) {
-			send_machine_predicate_updates(m);
+			check_unique_predicate(cfg_mps_type_predicate_, cfg_name_argument_, m.name,
+			                       { {cfg_type_argument_, m.type} },
+			                       remsrv, addsrv);
+
+			check_unique_predicate(cfg_mps_state_predicate_, cfg_name_argument_, m.name,
+			                       { {cfg_state_argument_, m.state} },
+			                       remsrv, addsrv);
+
+			if (m.type == "RS" && m.rs_ring_colors.size() > 0) {
+				// Info has actually been provided
+				std::unique_lock<std::mutex> lock(rs_ring_material_mutex_);
+				for (unsigned int i = 0; i < m.rs_ring_colors.size(); ++i) {
+					if (rs_ring_material_.find(m.rs_ring_colors[i]) != rs_ring_material_.end()) {
+						rs_expected_values.emplace_back(
+					    std::map<std::string, std::string>
+					    { { predicates_[cfg_rs_predicate_].typed_parameters[0].key, m.name },
+						    { predicates_[cfg_rs_predicate_].typed_parameters[1].key,
+								  rs_ring_colors_[m.rs_ring_colors[i]] },
+						    { predicates_[cfg_rs_predicate_].typed_parameters[2].key,
+								  cfg_rs_ring_num_values_[rs_ring_material_[m.rs_ring_colors[i]]] }
+					    });
+					}
+				}
+			}
 		}
+
+		std::sort(rs_expected_values.begin(), rs_expected_values.end());
+		check_multi_predicate(cfg_rs_predicate_, rs_expected_values, remsrv, addsrv);
+
+		if (! remsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
+			if( ! svc_update_knowledge_.call(remsrv)) {
+				ROS_ERROR("Failed to remove predicates");
+			}
+		}
+		if (! addsrv.request.knowledge.empty()) {
+			if (! svc_update_knowledge_.isValid()) {
+				create_svc_update_knowledge();
+			}
+			if( ! svc_update_knowledge_.call(addsrv)) {
+				ROS_ERROR("Failed to add predicates");
+				return;
+			}
+		}
+
 		last_machine_info_ = msg;
 	}
 
@@ -377,6 +464,7 @@ class ROSPlanKbUpdaterMachineInfo {
 	ros::NodeHandle    n;
 
 	ros::Subscriber    sub_machine_info_;
+	ros::Subscriber    sub_ring_info_;
 	ros::ServiceClient svc_update_knowledge_;
 	ros::ServiceClient svc_current_knowledge_;
 	ros::ServiceClient svc_current_instances_;
@@ -400,13 +488,16 @@ class ROSPlanKbUpdaterMachineInfo {
 	std::string cfg_rs_ring_value_green_;
 	std::string cfg_rs_ring_value_orange_;
 	std::string cfg_rs_ring_value_yellow_;
+	std::vector<std::string> cfg_rs_ring_num_values_;
 
 	std::string cfg_machine_instance_type_;
-
+	
 	std::map<std::string, rosplan_knowledge_msgs::DomainFormula> predicates_;
 	std::list<std::string> relevant_predicates_;
 
 	std::map<int, std::string> rs_ring_colors_;
+	std::map<int, unsigned int> rs_ring_material_;
+	std::mutex rs_ring_material_mutex_;
 	
 	rcll_ros_msgs::MachineInfo::ConstPtr last_machine_info_;
 };
