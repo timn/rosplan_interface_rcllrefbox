@@ -84,7 +84,7 @@ class ROSPlanKbUpdaterMachineInfo {
 		get_predicates();
 
 		if (predicates_[cfg_rs_predicate_].typed_parameters.size() != 3) {
-			ROS_ERROR("Invalid number of arguments to predicate '%s', got %zu, expected 3",
+			ROS_ERROR("[RPKB-MachineInfo] Invalid number of arguments to predicate '%s', got %zu, expected 3",
 			          cfg_rs_predicate_.c_str(), predicates_[cfg_rs_predicate_].typed_parameters.size());
 			throw std::runtime_error("Invalid number of arguments to RS predicate");
 		}
@@ -97,7 +97,7 @@ class ROSPlanKbUpdaterMachineInfo {
 			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateServiceArray>
 			("kcl_rosplan/update_knowledge_base_array", /* persistent */ true);
 
-		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
+		ROS_INFO("[RPKB-MachineInfo] Waiting for ROSPlan service update_knowledge_base");
 		svc_update_knowledge_.waitForExistence();
 	}
 
@@ -107,7 +107,7 @@ class ROSPlanKbUpdaterMachineInfo {
 		svc_current_knowledge_ =
 			n.serviceClient<rosplan_knowledge_msgs::GetAttributeService>
 			("kcl_rosplan/get_current_knowledge", /* persistent */ true);
-		ROS_INFO("Waiting for ROSPlan service get_current_knowledge");
+		ROS_INFO("[RPKB-MachineInfo] Waiting for ROSPlan service get_current_knowledge");
 		svc_current_knowledge_.waitForExistence();
 	}
 
@@ -117,7 +117,7 @@ class ROSPlanKbUpdaterMachineInfo {
 		svc_current_instances_ =
 			n.serviceClient<rosplan_knowledge_msgs::GetInstanceService>
 			("kcl_rosplan/get_current_instances", /* persistent */ true);
-		ROS_INFO("Waiting for ROSPlan service get_current_instances");
+		ROS_INFO("[RPKB-MachineInfo] Waiting for ROSPlan service get_current_instances");
 		svc_current_instances_.waitForExistence();
 	}
 
@@ -130,7 +130,7 @@ class ROSPlanKbUpdaterMachineInfo {
 			n.serviceClient<rosplan_knowledge_msgs::GetDomainPredicateDetailsService>
 			  ("kcl_rosplan/get_domain_predicate_details", /* persistent */ true);
 		if (! pred_client.waitForExistence(ros::Duration(20))) {
-			ROS_ERROR("No service provider for get_domain_predicate_details");
+			ROS_ERROR("[RPKB-MachineInfo] No service provider for get_domain_predicate_details");
 			return;
 		}
 
@@ -142,10 +142,10 @@ class ROSPlanKbUpdaterMachineInfo {
 				std::for_each(pred_srv.response.predicate.typed_parameters.begin(),
 				              pred_srv.response.predicate.typed_parameters.end(),
 				              [&pred_str](const auto &kv) { pred_str += " " + kv.key + ":" + kv.value; });
-				ROS_INFO("Relevant predicate: (%s%s)", pn.c_str(), pred_str.c_str());
+				ROS_INFO("[RPKB-MachineInfo] Relevant predicate: (%s%s)", pn.c_str(), pred_str.c_str());
 				predicates_[pn] = pred_srv.response.predicate;
 			} else {
-				ROS_ERROR("Failed to get predicate details for %s", pn.c_str());
+				ROS_ERROR("[RPKB-MachineInfo] Failed to get predicate details for %s", pn.c_str());
 				throw std::runtime_error("Failed to get predicate details");
 			}
 		}
@@ -180,7 +180,7 @@ class ROSPlanKbUpdaterMachineInfo {
 						                          arguments[ev.first] != ev.second); }))
 							
 						{
-							ROS_INFO("Updating '%s' for '%s'", predicate_name.c_str(), idvar_value.c_str());
+							ROS_INFO("[RPKB-MachineInfo] Updating '%s' for '%s'", predicate_name.c_str(), idvar_value.c_str());
 							rosplan_knowledge_msgs::KnowledgeItem new_a = a;
 							std::for_each(expected_values.begin(), expected_values.end(),
 							              [&new_a](auto &ev) {
@@ -216,10 +216,10 @@ class ROSPlanKbUpdaterMachineInfo {
 						              new_a.values.push_back(kv);
 					              });
 					addsrv.request.knowledge.push_back(new_a);
-					ROS_INFO("Adding '%s' info for %s", predicate_name.c_str(), idvar_value.c_str());
+					ROS_INFO("[RPKB-MachineInfo] Adding '%s' info for %s", predicate_name.c_str(), idvar_value.c_str());
 				}
 			} else {
-				ROS_ERROR("Failed to call '%s' for '%s'",
+				ROS_ERROR("[RPKB-MachineInfo] Failed to call '%s' for '%s'",
 				          svc_current_knowledge_.getService().c_str(), predicate_name.c_str());
 			}
 		}
@@ -280,7 +280,7 @@ class ROSPlanKbUpdaterMachineInfo {
 					              });
 				}
 			} else {
-				ROS_ERROR("Failed to call '%s' for '%s'",
+				ROS_ERROR("[RPKB-MachineInfo] Failed to call '%s' for '%s'",
 				          svc_current_knowledge_.getService().c_str(), predicate_name.c_str());
 			}
 		}
@@ -318,7 +318,7 @@ class ROSPlanKbUpdaterMachineInfo {
 				                  expected_values.begin(), expected_values.end())
 				    != std::make_pair(act_values.end(), expected_values.end()))
 				{
-					ROS_INFO("*** Updating %s", predicate_name.c_str());
+					ROS_INFO("[RPKB-MachineInfo] *** Updating %s", predicate_name.c_str());
 					// there is a mismatch, we need to update, always update all
 					std::for_each(act_attributes.begin(), act_attributes.end(),
 					              [&remsrv](const auto &a) { remsrv.request.knowledge.push_back(a); });
@@ -338,7 +338,7 @@ class ROSPlanKbUpdaterMachineInfo {
 					              });
 				}
 			} else {
-				ROS_ERROR("Failed to call '%s' for '%s'",
+				ROS_ERROR("[RPKB-MachineInfo] Failed to call '%s' for '%s'",
 				          svc_current_knowledge_.getService().c_str(), predicate_name.c_str());
 			}
 		}
@@ -353,7 +353,7 @@ class ROSPlanKbUpdaterMachineInfo {
 			create_svc_current_instances();
 		}
 		if (! svc_current_instances_.call(srv)) {
-			ROS_ERROR("Failed to retrieve current instances of type '%s'",
+			ROS_ERROR("[RPKB-MachineInfo] Failed to retrieve current instances of type '%s'",
 			          cfg_machine_instance_type_.c_str());
 			return;
 		}
@@ -369,7 +369,7 @@ class ROSPlanKbUpdaterMachineInfo {
 				new_i.instance_type = cfg_machine_instance_type_;
 				new_i.instance_name = m.name;
 				addsrv.request.knowledge.push_back(new_i);
-				ROS_INFO("Adding missing instance '%s - %s'",
+				ROS_INFO("[RPKB-MachineInfo] Adding missing instance '%s - %s'",
 				         new_i.instance_name.c_str(), new_i.instance_type.c_str());
 			}
 		}
@@ -378,7 +378,7 @@ class ROSPlanKbUpdaterMachineInfo {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
-				ROS_ERROR("Failed to add machine instances");
+				ROS_ERROR("[RPKB-MachineInfo] Failed to add machine instances");
 				return;
 			}
 		}
@@ -390,7 +390,7 @@ class ROSPlanKbUpdaterMachineInfo {
 		std::unique_lock<std::mutex> lock(rs_ring_material_mutex_);
 		for (const auto &r : msg->rings) {
 			if (r.raw_material > cfg_rs_ring_num_values_.size()) {
-				ROS_WARN("Invalid raw material, %u > %zu (ring %i), ignoring",
+				ROS_WARN("[RPKB-MachineInfo] Invalid raw material, %u > %zu (ring %i), ignoring",
 				         r.raw_material, cfg_rs_ring_num_values_.size(), r.ring_color);
 				continue;
 			}
@@ -444,7 +444,7 @@ class ROSPlanKbUpdaterMachineInfo {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(remsrv)) {
-				ROS_ERROR("Failed to remove predicates");
+				ROS_ERROR("[RPKB-MachineInfo] Failed to remove predicates");
 			}
 		}
 		if (! addsrv.request.knowledge.empty()) {
@@ -452,7 +452,7 @@ class ROSPlanKbUpdaterMachineInfo {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
-				ROS_ERROR("Failed to add predicates");
+				ROS_ERROR("[RPKB-MachineInfo] Failed to add predicates");
 				return;
 			}
 		}
