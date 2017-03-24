@@ -121,7 +121,7 @@ class ROSPlanKbUpdaterOrderInfo {
 			n.serviceClient<rosplan_knowledge_msgs::KnowledgeUpdateServiceArray>
 			("kcl_rosplan/update_knowledge_base_array", /* persistent */ true);
 
-		ROS_INFO("Waiting for ROSPlan service update_knowledge_base");
+		ROS_INFO("[RPKB-OrdInfo] Waiting for ROSPlan service update_knowledge_base");
 		svc_update_knowledge_.waitForExistence();
 	}
 
@@ -131,7 +131,7 @@ class ROSPlanKbUpdaterOrderInfo {
 		svc_current_knowledge_ =
 			n.serviceClient<rosplan_knowledge_msgs::GetAttributeService>
 			("kcl_rosplan/get_current_knowledge", /* persistent */ true);
-		ROS_INFO("Waiting for ROSPlan service get_current_knowledge");
+		ROS_INFO("[RPKB-OrdInfo] Waiting for ROSPlan service get_current_knowledge");
 		svc_current_knowledge_.waitForExistence();
 	}
 
@@ -141,7 +141,7 @@ class ROSPlanKbUpdaterOrderInfo {
 		svc_current_instances_ =
 			n.serviceClient<rosplan_knowledge_msgs::GetInstanceService>
 			("kcl_rosplan/get_current_instances", /* persistent */ true);
-		ROS_INFO("Waiting for ROSPlan service get_current_instances");
+		ROS_INFO("[RPKB-OrdInfo] Waiting for ROSPlan service get_current_instances");
 		svc_current_instances_.waitForExistence();
 	}
 
@@ -154,7 +154,7 @@ class ROSPlanKbUpdaterOrderInfo {
 			n.serviceClient<rosplan_knowledge_msgs::GetDomainPredicateDetailsService>
 			  ("kcl_rosplan/get_domain_predicate_details", /* persistent */ true);
 		if (! pred_client.waitForExistence(ros::Duration(20))) {
-			ROS_ERROR("No service provider for get_domain_predicate_details");
+			ROS_ERROR("[RPKB-OrdInfo] No service provider for get_domain_predicate_details");
 			return;
 		}
 
@@ -166,10 +166,10 @@ class ROSPlanKbUpdaterOrderInfo {
 				std::for_each(pred_srv.response.predicate.typed_parameters.begin(),
 				              pred_srv.response.predicate.typed_parameters.end(),
 				              [&pred_str](const auto &kv) { pred_str += " " + kv.key + ":" + kv.value; });
-				ROS_INFO("Relevant predicate: (%s%s)", pn.c_str(), pred_str.c_str());
+				ROS_INFO("[RPKB-OrdInfo] Relevant predicate: (%s%s)", pn.c_str(), pred_str.c_str());
 				predicates_[pn] = pred_srv.response.predicate;
 			} else {
-				ROS_ERROR("Failed to get predicate details for %s", pn.c_str());
+				ROS_ERROR("[RPKB-OrdInfo] Failed to get predicate details for %s", pn.c_str());
 				return;
 			}
 		}
@@ -184,7 +184,7 @@ class ROSPlanKbUpdaterOrderInfo {
 			n.serviceClient<rosplan_knowledge_msgs::GetDomainAttributeService>
 			  ("kcl_rosplan/get_domain_functions", /* persistent */ true);
 		if (! func_client.waitForExistence(ros::Duration(20))) {
-			ROS_ERROR("No service provider for get_domain_functions");
+			ROS_ERROR("[RPKB-OrdInfo] No service provider for get_domain_functions");
 			return;
 		}	
 
@@ -197,16 +197,16 @@ class ROSPlanKbUpdaterOrderInfo {
 					if (rf == pn.name) {
 						found_func = true;
 						functions_[rf] = pn;
-						ROS_INFO("Relevant function: %s", pn.name.c_str());
+						ROS_INFO("[RPKB-OrdInfo] Relevant function: %s", pn.name.c_str());
 						break;
 					}
 				}
 				if (!found_func) {
-					ROS_ERROR("Failed to get function info for: %s", rf.c_str());
+					ROS_ERROR("[RPKB-OrdInfo] Failed to get function info for: %s", rf.c_str());
 				}
 			}
 		} else {
-			ROS_ERROR("Failed to get functions info");
+			ROS_ERROR("[RPKB-OrdInfo] Failed to get functions info");
 		}
 	}
 
@@ -239,7 +239,7 @@ class ROSPlanKbUpdaterOrderInfo {
 						                          arguments[ev.first] != ev.second); }))
 							
 						{
-							ROS_INFO("Updating '%s' for '%s'", predicate_name.c_str(), idvar_value.c_str());
+							ROS_INFO("[RPKB-OrdInfo] Updating '%s' for '%s'", predicate_name.c_str(), idvar_value.c_str());
 							rosplan_knowledge_msgs::KnowledgeItem new_a = a;
 							std::for_each(expected_values.begin(), expected_values.end(),
 							              [&new_a](auto &ev) {
@@ -275,10 +275,10 @@ class ROSPlanKbUpdaterOrderInfo {
 						              new_a.values.push_back(kv);
 					              });
 					addsrv.request.knowledge.push_back(new_a);
-					ROS_INFO("Adding '%s' info for %s", predicate_name.c_str(), idvar_value.c_str());
+					ROS_INFO("[RPKB-OrdInfo] Adding '%s' info for %s", predicate_name.c_str(), idvar_value.c_str());
 				}
 			} else {
-				ROS_ERROR("Failed to call '%s' for '%s'",
+				ROS_ERROR("[RPKB-OrdInfo] Failed to call '%s' for '%s'",
 				          svc_current_knowledge_.getService().c_str(), predicate_name.c_str());
 			}
 		}
@@ -315,7 +315,7 @@ class ROSPlanKbUpdaterOrderInfo {
 							
 						{
 							if (a.function_value != function_value) {
-								ROS_INFO("Updating '%s' for '%s'", function_name.c_str(), idvar_value.c_str());
+								ROS_INFO("[RPKB-OrdInfo] Updating '%s' for '%s'", function_name.c_str(), idvar_value.c_str());
 								rosplan_knowledge_msgs::KnowledgeItem new_a = a;
 								std::for_each(extra_args.begin(), extra_args.end(),
 									      [&new_a, &function_value](auto &ev) {
@@ -331,7 +331,7 @@ class ROSPlanKbUpdaterOrderInfo {
 								remsrv.request.knowledge.push_back(a);
 								addsrv.request.knowledge.push_back(new_a);
 							} else {
-								ROS_INFO("No need to update %s", function_name.c_str());
+								ROS_INFO("[RPKB-OrdInfo] No need to update %s", function_name.c_str());
 							}
 						}
 						// we do NOT break here, by this, we also remove any additional
@@ -356,10 +356,10 @@ class ROSPlanKbUpdaterOrderInfo {
 					              });
 					new_a.function_value = function_value;
 					addsrv.request.knowledge.push_back(new_a);
-					ROS_INFO("Adding '%s' info for %s", function_name.c_str(), idvar_value.c_str());
+					ROS_INFO("[RPKB-OrdInfo] Adding '%s' info for %s", function_name.c_str(), idvar_value.c_str());
 				}
 			} else {
-				ROS_ERROR("Failed to call '%s' for '%s'",
+				ROS_ERROR("[RPKB-OrdInfo] Failed to call '%s' for '%s'",
 				          svc_current_knowledge_.getService().c_str(), function_name.c_str());
 			}
 		}
@@ -419,7 +419,7 @@ class ROSPlanKbUpdaterOrderInfo {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(remsrv)) {
-				ROS_ERROR("Failed to remove predicates");
+				ROS_ERROR("[RPKB-OrdInfo] Failed to remove predicates");
 			}
 		}
 		if (! addsrv.request.knowledge.empty()) {
@@ -427,7 +427,7 @@ class ROSPlanKbUpdaterOrderInfo {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
-				ROS_ERROR("Failed to add predicates");
+				ROS_ERROR("[RPKB-OrdInfo] Failed to add predicates");
 				return;
 			}
 		}
@@ -461,7 +461,7 @@ class ROSPlanKbUpdaterOrderInfo {
 			create_svc_current_instances();
 		}
 		if (! svc_current_instances_.call(srv)) {
-			ROS_ERROR("Failed to retrieve current instances of type '%s'",
+			ROS_ERROR("[RPKB-OrdInfo] Failed to retrieve current instances of type '%s'",
 			          order_instance_type_.c_str());
 			return;
 		}
@@ -471,7 +471,7 @@ class ROSPlanKbUpdaterOrderInfo {
 		std::vector<std::string> instances = srv.response.instances;
 		std::sort(instances.begin(), instances.end());
 		for (const rcll_ros_msgs::Order &o : orders) {
-			//ROS_WARN("Got: %d = %s", o.id, order_id_to_name(o.id));
+			//ROS_WARN("[RPKB-OrdInfo] Got: %d = %s", o.id, order_id_to_name(o.id));
 			std::string order_name(order_id_to_name(o.id));
 			if (! std::binary_search(instances.begin(), instances.end(), order_name)) {
 				rosplan_knowledge_msgs::KnowledgeItem new_i;
@@ -479,7 +479,7 @@ class ROSPlanKbUpdaterOrderInfo {
 				new_i.instance_type = order_instance_type_;
 				new_i.instance_name = order_name;
 				addsrv.request.knowledge.push_back(new_i);
-				ROS_INFO("Adding missing instance '%s - %s'",
+				ROS_INFO("[RPKB-OrdInfo] Adding missing instance '%s - %s'",
 				         new_i.instance_name.c_str(), new_i.instance_type.c_str());
 			}
 		}
@@ -488,7 +488,7 @@ class ROSPlanKbUpdaterOrderInfo {
 				create_svc_update_knowledge();
 			}
 			if( ! svc_update_knowledge_.call(addsrv)) {
-				ROS_ERROR("Failed to add machine instances");
+				ROS_ERROR("[RPKB-OrdInfo] Failed to add machine instances");
 				return;
 			}
 		}
@@ -497,7 +497,7 @@ class ROSPlanKbUpdaterOrderInfo {
 	void
 	order_info_cb(const rcll_ros_msgs::OrderInfo::ConstPtr& msg)
 	{
-		//ROS_WARN("Sending updates (conditionally)");
+		//ROS_WARN("[RPKB-OrdInfo] Sending updates (conditionally)");
 		send_order_instance_updates(msg->orders);
 		for (const rcll_ros_msgs::Order &o : msg->orders) {
 			send_order_predicate_updates(o);
