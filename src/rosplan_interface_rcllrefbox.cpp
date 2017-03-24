@@ -256,6 +256,8 @@ class ROSPlanInterfaceRCLLRefBox {
 				// Ignore predicates which we do not update
 				continue;
 			}
+			// equality is a built-in predicate
+			if (pn == "=") continue;
 
 			rosplan_knowledge_msgs::GetDomainPredicateDetailsService pred_srv;
 			pred_srv.request.name = pn;
