@@ -56,7 +56,7 @@ class ROSPlanKbUpdaterOrderInfo {
 		GET_CONFIG(privn, n, "order_ring2_color_predicate", order_ring2_color_predicate_);
 		GET_CONFIG(privn, n, "order_ring3_color_predicate", order_ring3_color_predicate_);
 		GET_CONFIG(privn, n, "order_cap_color_predicate", order_cap_color_predicate_);
-		GET_CONFIG(privn, n, "order_delivery_gate_predicate", order_delivery_gate_predicate_);
+		GET_CONFIG(privn, n, "order_gate_predicate", order_gate_predicate_);
 		GET_CONFIG(privn, n, "order_delivery_period_begin_predicate", order_delivery_period_begin_predicate_);
 		GET_CONFIG(privn, n, "order_delivery_period_end_predicate", order_delivery_period_end_predicate_);
 
@@ -86,7 +86,10 @@ class ROSPlanKbUpdaterOrderInfo {
 
 
 
-		relevant_predicates_ = {order_complexity_predicate_, order_base_color_predicate_, order_ring1_color_predicate_, order_ring2_color_predicate_, order_ring3_color_predicate_, order_cap_color_predicate_, order_delivery_gate_predicate_};
+		relevant_predicates_ = {order_complexity_predicate_, order_base_color_predicate_,
+		                        order_ring1_color_predicate_, order_ring2_color_predicate_,
+		                        order_ring3_color_predicate_, order_cap_color_predicate_,
+		                        order_gate_predicate_};
 
 		relevant_predicates_.sort();
 		relevant_predicates_.unique();
@@ -388,12 +391,14 @@ class ROSPlanKbUpdaterOrderInfo {
 		                       { {order_color_argument_, rs_cap_colors_[o.cap_color]} },
 		                       remsrv, addsrv);
 
-		check_unique_predicate(order_delivery_gate_predicate_, order_id_argument_, order_id_to_name(o.id),
+		check_unique_predicate(order_gate_predicate_, order_id_argument_, order_id_to_name(o.id),
 		                       { {order_gate_argument_, delivery_gate_to_name(o.delivery_gate)} },
 		                       remsrv, addsrv);
 
-		check_function(order_delivery_period_begin_predicate_, order_id_argument_, order_id_to_name(o.id), {}, o.delivery_period_begin, remsrv, addsrv);
-		check_function(order_delivery_period_end_predicate_, order_id_argument_, order_id_to_name(o.id), {}, o.delivery_period_end, remsrv, addsrv);
+		check_function(order_delivery_period_begin_predicate_, order_id_argument_, order_id_to_name(o.id),
+		               {}, o.delivery_period_begin, remsrv, addsrv);
+		check_function(order_delivery_period_end_predicate_, order_id_argument_, order_id_to_name(o.id),
+		               {}, o.delivery_period_end, remsrv, addsrv);
 
 		if (o.complexity > 0) {
 			check_unique_predicate(order_ring1_color_predicate_, order_id_argument_, order_id_to_name(o.id),
@@ -519,7 +524,7 @@ class ROSPlanKbUpdaterOrderInfo {
 	std::string order_ring2_color_predicate_;
 	std::string order_ring3_color_predicate_;
 	std::string order_cap_color_predicate_;
-	std::string order_delivery_gate_predicate_;
+	std::string order_gate_predicate_;
 	std::string order_delivery_period_begin_predicate_;
 	std::string order_delivery_period_end_predicate_;
 
